@@ -1,0 +1,262 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""
+Created on Sun Sep 23 12:29:57 2018
+
+@author: danaoqueyang
+"""
+
+import pandas as pd
+import matplotlib.pyplot as plt
+import seaborn as sns
+import numpy as np
+from sklearn.linear_model import LinearRegression
+from sklearn.metrics import mean_squared_error
+from sklearn.metrics import r2_score
+from sklearn.linear_model import Ridge
+from sklearn.linear_model import Lasso
+from sklearn.linear_model import ElasticNet
+
+
+df = pd.read_csv('https://raw.githubusercontent.com/rasbt/'
+                 'python-machine-learning-book-2nd-edition'
+                 '/master/code/ch10/housing.data.txt',
+                 header=None,sep='\s+')
+
+df.columns = ['CRIM','ZN','INDUS','CHAS','NOX','RM','AGE','DIS',
+              'RAD','TAX','PTRATIO','B','LSTAT','MEDV']
+
+print(df.head())
+print(df.info())
+print(df.describe())
+
+
+
+## Scatter plot
+cols = ['LSTAT', 'INDUS', 'NOX', 'RM', 'MEDV']
+
+sns.pairplot(df[cols], size = 2.5)
+
+plt.tight_layout()
+
+plt.show()
+
+
+## Heatmap
+cm = np.corrcoef(df[cols].values.T)
+
+sns.set(font_scale=1)
+
+hm = sns.heatmap(cm, cbar=True, annot=True, square=True, fmt='.2f',
+                 annot_kws={'size':6.5},yticklabels=cols,xticklabels=cols)
+
+plt.show()
+
+
+## Generate box plot
+def generate_box_plot(data, cols):
+    # standardize data
+    new_df = df.copy()
+    for i in range(len(data.columns)):
+        col = new_df.iloc[:,i]
+        new_df.iloc[:,i] = (col - col.mean()) / col.std()
+    
+    plt.figure()
+    plt.boxplot(new_df.values, labels=cols)
+    plt.xlabel("features")
+    plt.ylabel("Standarded Quantile Range")
+    plt.show()
+    
+generate_box_plot(df, df.columns)
+
+
+
+
+# split dataset into training data and test data
+from sklearn.model_selection import train_test_split
+X = df.iloc[:, :-1].values
+y = df['MEDV'].values
+X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
+
+
+
+
+
+## Part2: Linear Regression
+
+print("Part 2: Linear Regression")
+
+#fit a multiple regression model
+slr = LinearRegression()
+slr.fit(X_train, y_train)
+y_train_pred = slr.predict(X_train)
+y_test_pred = slr.predict(X_test)
+
+#model coefficients and y intercept 
+
+features = list(df.columns)[:-1]
+features.append('intercept')
+lr_coefs = np.zeros(X.shape[1]+1)
+lr_coefs[:-1] = slr.coef_
+lr_coefs[-1] = slr.intercept_
+print(pd.DataFrame(lr_coefs, index = features, columns = ['lr_coefs']))
+
+#residual plot
+plt.scatter(y_train_pred, y_train_pred - y_train,
+           c='blue', marker='o', edgecolor='white', label='Training data')
+
+plt.scatter(y_test_pred, y_test_pred - y_test,
+           c='yellow', marker='s', edgecolor='white', label='Test data')
+
+plt.xlabel('Predicted values')
+plt.ylabel('lr Residuals')
+plt.legend(loc='upper left')
+plt.hlines(y=0, xmin=0, xmax=50, color='black', lw=2)
+plt.xlim([-10,50])
+plt.show()
+
+#calculate performance metrics: MSE and R2
+
+print('MSE train: %.3f, test: %.3f' %(mean_squared_error(y_train, 
+                                                         y_train_pred), 
+                                      mean_squared_error(y_test, 
+                                                         y_test_pred)))
+
+print('R^2 train: %.3f, test:%.3f' %(r2_score(y_train, 
+                                              y_train_pred), 
+                                     r2_score(y_test, 
+                                              y_test_pred)),'\n')
+
+
+
+
+#Part 3.1: Ridge regression
+
+print("Part 3.1: Ridge Regression")
+
+alpha = [0.05, 0.01, 0.1, 1.0]
+ridge_performance = np.zeros([4,len(alpha)])
+ridge_coefs = np.zeros([len(features), len(alpha)])
+
+for i in range(len(alpha)):
+    ridge = Ridge(alpha=alpha[i])
+    ridge.fit(X_train, y_train)
+    ridge_y_train_pred = ridge.predict(X_train)
+    ridge_y_test_pred = ridge.predict(X_test)
+    
+    ridge_coefs[:-1,i] = ridge.coef_
+    ridge_coefs[-1,i] = ridge.intercept_
+    ridge_performance[0,i] = mean_squared_error(y_train,ridge_y_train_pred)
+    ridge_performance[1,i] = mean_squared_error(y_test, ridge_y_test_pred)
+    ridge_performance[2,i] = r2_score(y_train, ridge_y_train_pred)
+    ridge_performance[3,i] = r2_score(y_test, ridge_y_test_pred)
+    
+    plt.scatter(ridge_y_train_pred, ridge_y_train_pred - y_train,
+           c='blue', marker='o', edgecolor='white', label='Training data')
+    plt.scatter(ridge_y_test_pred, ridge_y_test_pred - y_test,
+           c='yellow', marker='s', edgecolor='white', label='Test data')
+    plt.xlabel('Predicted values')
+    plt.ylabel('ridge Residuals')
+    plt.legend(loc='upper left')
+    plt.hlines(y=0, xmin=0, xmax=50, color='black', lw=2)
+    plt.xlim([-10,50])
+    plt.show()
+
+print("Performance of different alpha values(Ridge):", '\n')
+
+performance_col = ['MSE train', 'MSE test', 'R2 train', 'R2 test']
+print(pd.DataFrame(ridge_performance, index=performance_col,
+                   columns=alpha), '\n')
+
+print(pd.DataFrame(ridge_coefs, index=features, columns=alpha),'\n')
+
+
+
+
+#Part 3.2: Lasso regression
+print("Part 3.2: Lasso Regression")
+
+lasso_performance = np.zeros([4,len(alpha)])
+lasso_coefs = np.zeros([len(features), len(alpha)])
+
+for n in range(len(alpha)):
+    lasso = Lasso(alpha=alpha[n])
+    lasso.fit(X_train, y_train)
+    lasso_y_train_pred = lasso.predict(X_train)
+    lasso_y_test_pred = lasso.predict(X_test)
+    
+    lasso_coefs[:-1,n] = lasso.coef_
+    lasso_coefs[-1,n] = lasso.intercept_
+    lasso_performance[0,n] = mean_squared_error(y_train, lasso_y_train_pred)
+    lasso_performance[1,n] = mean_squared_error(y_test, lasso_y_test_pred)
+    lasso_performance[2,n] = r2_score(y_train, lasso_y_train_pred)
+    lasso_performance[3,n] = r2_score(y_test, lasso_y_test_pred)
+    
+    plt.scatter(lasso_y_train_pred, lasso_y_train_pred - y_train,
+           c='blue', marker='o', edgecolor='white', label='Training data')
+    plt.scatter(lasso_y_test_pred, lasso_y_test_pred - y_test,
+           c='yellow', marker='s', edgecolor='white', label='Test data')
+    plt.xlabel('Predicted values')
+    plt.ylabel('lasso Residuals')
+    plt.legend(loc='upper left')
+    plt.hlines(y=0, xmin=0, xmax=50, color='black', lw=2)
+    plt.xlim([-10,50])
+    plt.show()
+
+print("Performance of different alpha values(Lasso):", '\n')
+
+performance_col = ['MSE train', 'MSE test', 'R2 train', 'R2 test']
+print(pd.DataFrame(lasso_performance, index=performance_col, 
+                   columns=alpha), '\n')
+
+print(pd.DataFrame(lasso_coefs, index=features, columns=alpha),'\n')
+
+
+
+
+#Part 3.3 ElasticNet regression
+
+print("Part 3.3: ElasticNet Regression")
+
+l1_ratio = [0.3, 0.5, 0.8]
+elanet_coefs = np.zeros([len(features), len(l1_ratio)])
+elanet_performance = np.zeros([4, len(l1_ratio)])
+
+for m in range(len(l1_ratio)):
+    elanet = ElasticNet(alpha=0.01, l1_ratio=l1_ratio[m])
+    elanet.fit(X_train, y_train)
+    elanet_y_train_pred = elanet.predict(X_train)
+    elanet_y_test_pred = elanet.predict(X_test)
+    
+    elanet_coefs[:-1,m] = elanet.coef_
+    elanet_coefs[-1,m] = elanet.intercept_
+    elanet_performance[0,m] = mean_squared_error(y_train, elanet_y_train_pred)
+    elanet_performance[1,m] = mean_squared_error(y_test, elanet_y_test_pred)
+    elanet_performance[2,m] = r2_score(y_train, elanet_y_train_pred)
+    elanet_performance[3,m] = r2_score(y_test, elanet_y_test_pred)
+    
+    plt.scatter(elanet_y_train_pred, elanet_y_train_pred - y_train,
+           c='blue', marker='o', edgecolor='white', label='Training data')
+    plt.scatter(elanet_y_test_pred, elanet_y_test_pred - y_test,
+           c='yellow', marker='s', edgecolor='white', label='Test data')
+    plt.xlabel('Predicted values')
+    plt.ylabel('elanet Residuals')
+    plt.legend(loc='upper left')
+    plt.hlines(y=0, xmin=0, xmax=50, color='black', lw=2)
+    plt.xlim([-10,50])
+    plt.show()
+
+print("Performance of different l1 ratio(ElasticNet):", '\n')
+
+performance_col = ['MSE train', 'MSE test', 'R2 train', 'R2 test']
+print(pd.DataFrame(elanet_performance, index=performance_col, columns=l1_ratio), '\n')
+
+print(pd.DataFrame(elanet_coefs, index=features, columns=l1_ratio),'\n')
+
+print("-------------------the end-------------------")
+
+
+print("My name is Xiaoman Gong")
+print("My NetID is: xiaoman5")
+print("I hereby certify that I have read the University policy on Academic Integrity and that I am not in violation.")
+
